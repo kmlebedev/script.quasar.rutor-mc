@@ -88,8 +88,7 @@ def search_episode(info):
 
 def search_season(info):
     info["type"] = "show"
-    info["query"] = info['title'].encode('utf-8') + ' %s %s' % (
-        common.season_names["ru"], info['season'])  # define query
+    info["query"] = info['title'].encode('utf-8') + ' [S%02d]' % info['season']  # define query
     return search_general(info)
 
 

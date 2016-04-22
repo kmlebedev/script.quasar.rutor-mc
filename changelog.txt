@@ -1,1 +1,2 @@
+v1.3.6 fixing season search with [S01] format
 v1.3.5 first version
