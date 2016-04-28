@@ -1,103 +1,73 @@
 # coding: utf-8
+from quasar.provider import *
+
 __author__ = 'mancuniancol'
 
-import common
-from bs4 import BeautifulSoup
-from quasar import provider
 
-# this read the settings
-settings = common.Settings()
-# define the browser
-browser = common.Browser()
-# create the filters
-filters = common.Filtering()
-
-
-def extract_torrents(data):
-    filters.information()  # print filters settings
-    sint = common.ignore_exception(ValueError)(int)
-    results = []
-    cont = 0
-    if data is not None:
-        soup = BeautifulSoup(data, 'html5lib')
-        links = soup.findAll('table')
-        if len(links) > 3:
-            links = links[2].tbody.findAll('tr')
-            for link in links:
-                columns = link.findAll('td')
+def extract_torrents(html=None):
+    if html is not None:
+        dom = ParseHtml().feed(html)
+        tables = ParseHtml.find_all(dom, 'table')
+        if len(tables) > 3:
+            for elem in tables[2].find('tr'):
+                columns = ParseHtml.find_all(elem, 'td')
                 if len(columns) == 5:
-                    name = columns[1].text.strip()  # name
-                    magnet = columns[1].select('a + a')[0]['href']  # torrent
-                    size = columns[3].text.strip()  # size
-                    temp = columns[4].text.split()
-                    seeds = temp[0]  # seeds
-                    peers = temp[1]  # peers
-                    # info_magnet = common.Magnet(magnet)
-                    if filters.verify(filters.title, size):
-                        cont += 1
-                        # magnet = common.getlinks(magnet)
-                        results.append({"name": name,
-                                        "uri": magnet,
-                                        # "info_hash": info_magnet.hash,
-                                        "size": size,
-                                        "seeds": sint(seeds),
-                                        "peers": sint(peers),
-                                        "language": settings.value.get("language", "en"),
-                                        "provider": settings.name
-                                        })  # return the torrent
-                        if cont >= int(settings.value.get("max_magnets", 10)):  # limit magnets
-                            break
-                    else:
-                        provider.log.warning(filters.reason)
-    provider.log.info('>>>>>>' + str(cont) + ' torrents sent to Quasar<<<<<<<')
-    return results
+                    print columns[1]
+                    name = ParseHtml.select(html=columns[1])  # name
+                    magnet = ParseHtml.select(html=columns[1], tag='a', order=2, element='href')  # magnet
+                    size = ParseHtml.select(html=columns[3])  # size
+                    seeds = ParseHtml.select(html=columns[4], tag='span')  # seeds
+                    peers = ParseHtml.select(html=columns[4], tag='span', order=2)  # peers
+                    yield (name, magnet, size, seeds, peers)
 
 
-def search(query):
-    info = {"query": query,
-            "type": "general"}
-    return search_general(info)
-
-
-def search_general(info):
-    info["extra"] = settings.value.get("extra", "")  # add the extra information
-    query = filters.type_filtering(info, '%20')  # check type filter and set-up filters.title
-    url_search = "%s/search/%s" % (settings.value["url_address"], query)
-    provider.log.info(url_search)
-    browser.open(url_search)
-    return extract_torrents(browser.content)
+def search(title):
+    Filtering.type = "general"
+    url = "%s/search/%s" % (Settings["url_address"], title)
+    Filtering.add(title=title, url=url)
+    return process(separator="%20", generator=extract_torrents)
 
 
 def search_movie(info):
-    info["type"] = "movie"
-    query = common.translator(info['imdb_id'], 'ru', False)  # Just title
-    info["query"] = query
-    return search_general(info)
+    Filtering.type = "movie"
+    # title in russian
+    title = translator(info['imdb_id'], 'ru', False)  # Just title
+    url = "%s/search/%s" % (Settings["url_address"], title)
+    Filtering.add(title=title, url=url)
+    # title in english
+    title = info["title"]  # Just title
+    url = "%s/search/%s" % (Settings["url_address"], title)
+    Filtering.add(title=title, url=url)
+
+    return process(separator="%20", generator=extract_torrents)
 
 
 def search_episode(info):
     if info['absolute_number'] == 0:
-        info["type"] = "show"
-        info["query"] = info['title'].encode('utf-8') + ' s%02de%02d' % (
-            info['season'], info['episode'])  # define query
+        Filtering.type = "show"
+        # S00E00 format
+        title = info['title'].encode('utf-8') + ' s%02de%02d' % (info['season'], info['episode'])
+        url = "%s/search/%s" % (Settings["url_address"], title)
+        Filtering.add(title=title, url=url)
+        # [S00] format
+        title = info['title'].encode('utf-8') + ' [S%02d]' % info['season']
+        url = "%s/search/%s" % (Settings["url_address"], title)
+        Filtering.add(title=title, url=url)
     else:
         info["type"] = "anime"
-        info["query"] = info['title'].encode('utf-8') + ' %02d' % info['absolute_number']  # define query anime
-    return search_general(info)
+        title = info['title'].encode('utf-8') + ' %02d' % info['absolute_number']
+        url = "%s/search/%s" % (Settings["url_address"], title)
+        Filtering.add(title=title, url=url)
+    return process(separator="%20", generator=extract_torrents)
 
 
 def search_season(info):
-    info["type"] = "show"
-    info["query"] = info['title'].encode('utf-8') + ' [S%02d]' % info['season']  # define query
-    return search_general(info)
+    Filtering.type = "show"
+    title = info['title'].encode('utf-8') + ' [S%02d]' % info['season']
+    url = "%s/search/%s" % (Settings["url_address"], title)
+    Filtering.add(title=title, url=url)
+    return process(separator="%20", generator=extract_torrents)
 
 
 # This registers your module for use
-if "false" == settings.value.get("episodes", "false"):
-    provider.register(search, search_movie, search_episode, search_season)
-else:
-    provider.register(search, search_movie, search_season, search_season)
-
-del settings
-del browser
-del filters
+register(search, search_movie, search_episode, search_season)

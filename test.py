@@ -1,7 +1,7 @@
 # coding: utf-8
 __author__ = 'mancuniancol'
 
-data = '''
+html = '''
 
 <html>
 <head>
@@ -308,17 +308,85 @@ screen.colorDepth:screen.pixelDepth))+";u"+escape(document.URL)+
 </html>
 '''
 
-from bs4 import BeautifulSoup
+import quasar.ehp
 
-soup = BeautifulSoup(data, 'html5lib')
-links = soup.findAll('table')[2].tbody.findAll('tr')
-for link in links:
-    columns = link.findAll('td')
-    if len(columns)==5:
-        print columns[1].select('a + a')[0]['href']  #magnet
-        print columns[1].text  #name
-        print columns[3].text  # size
-        temp = columns[4].text.split()
-        print temp[0]  # seed
-        print temp[1]  # peers
-    print "************************"
+
+class ParseHtml(quasar.ehp.Html):
+    @staticmethod
+    def find(dom1, tag=None, with_attrib=None):
+        elem1 = None
+        if dom1 is not None and tag is not None:
+            elem1 = dom1.fst(tag) if with_attrib is None else dom1.fst(tag, with_attrib)
+        return elem1
+
+    @staticmethod
+    def find_all(dom1, tag=None, with_attrib=None):
+        result = []
+        if dom1 is not None and tag is not None:
+            elem1 = dom1.find(tag) if with_attrib is None else dom1.find(tag, with_attrib)
+            result = list(elem1) if elem1 is not None else []
+        return result
+
+    @staticmethod
+    def select(html=None, tag=None, order=1, with_attrib=None, element='text'):
+        value_attrib = ''
+        if html is not None:
+            if tag is not None:
+                values_tag = html.find(tag) if with_attrib is None else html.find(tag, with_attrib)
+                cm = 0
+                value_tag = None
+                for item in values_tag:
+                    cm += 1
+                    if cm == order:
+                        value_tag = item
+                        break
+                value_tag = value_tag if value_tag is not None else None
+            else:
+                value_tag = html
+            if value_tag is not None:
+                if element is 'text':
+                    value_attrib = value_tag.text()
+                else:
+                    value_attrib = value_tag.attr[element]
+            else:
+                return ''
+            if value_attrib is not None:
+                value_attrib = value_attrib.strip()
+            else:
+                value_attrib = ''
+        return value_attrib
+
+
+dom = ParseHtml().feed(html)
+tables = ParseHtml.find_all(dom, 'table')
+if len(tables) > 3:
+    for elem in tables[2].find('tr'):
+        columns = ParseHtml.find_all(elem, 'td')
+        if len(columns) == 5:
+            print columns[1]
+            name = ParseHtml.select(html=columns[1])  # name
+            magnet = ParseHtml.select(html=columns[1], tag='a', order=2, element='href')  # magnet
+            size = ParseHtml.select(html=columns[3])  # size
+            seeds = ParseHtml.select(html=columns[4], tag='span')  # seeds
+            peers = ParseHtml.select(html=columns[4], tag='span', order=2)  # peers
+            print name
+            print magnet
+            print size
+            print seeds
+            print peers
+            print '++++++++++++++++'
+
+            # from bs4 import BeautifulSoup
+            #
+            # soup = BeautifulSoup(data, 'html5lib')
+            # links = soup.findAll('table')[2].tbody.findAll('tr')
+            # for link in links:
+            #     columns = link.findAll('td')
+            #     if len(columns)==5:
+            #         print columns[1].select('a + a')[0]['href']  #magnet
+            #         print columns[1].text  #name
+            #         print columns[3].text  # size
+            #         temp = columns[4].text.split()
+            #         print temp[0]  # seed
+            #         print temp[1]  # peers
+            #     print "************************"
